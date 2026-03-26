@@ -8,7 +8,7 @@ const crypto = require("crypto");
 
 const app = express();
 
-// ===== TRUST PROXY (CHO RENDER) =====
+// ===== TRUST PROXY (Render bắt buộc) =====
 app.set("trust proxy", 1);
 
 // ===== SESSION =====
@@ -17,7 +17,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: true,
+        secure: true,       // bắt buộc HTTPS (Render OK)
         sameSite: "none"
     }
 }));
@@ -34,25 +34,34 @@ passport.use(new GoogleStrategy({
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: process.env.CALLBACK_URL
 }, (accessToken, refreshToken, profile, done) => {
-    return done(null, profile);
+
+    const user = {
+        id: profile.id,
+        name: profile.displayName || "NoName",
+        email: (profile.emails && profile.emails.length > 0)
+            ? profile.emails[0].value
+            : "NoEmail"
+    };
+
+    return done(null, user);
 }));
 
-// ===== LƯU USER (RAM - TẠM) =====
-global.users = {};
+// ===== LƯU USER (RAM - DEMO) =====
+const users = {};
 
 // ===== ROUTE =====
 
-// test
+// test server
 app.get("/", (req, res) => {
     res.send("Server chạy OK 🚀");
 });
 
-// login google
+// ===== LOGIN GOOGLE =====
 app.get("/auth/google",
     passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
-// callback google
+// ===== CALLBACK =====
 app.get("/auth/google/callback",
     passport.authenticate("google", { failureRedirect: "/" }),
     (req, res) => {
@@ -61,67 +70,49 @@ app.get("/auth/google/callback",
             return res.redirect("/");
         }
 
-        const token = crypto.randomBytes(16).toString("hex");
+        // 🔐 tạo token
+        const token = crypto.randomBytes(32).toString("hex");
 
-        const name = req.user.displayName || "NoName";
-        const email = (req.user.emails && req.user.emails.length > 0)
-            ? req.user.emails[0].value
-            : "NoEmail";
+        // lưu user
+        users[token] = req.user;
 
-        global.users[token] = { name, email };
+        console.log("✅ LOGIN:", req.user.email);
+        console.log("🔑 TOKEN:", token);
 
-        console.log("User login:", global.users[token]);
-
-        // ===============================
-        // 🔥 AUTO LOGIN VỀ GAME
-        // ===============================
+        // ===================================
+        // 🔥 QUAN TRỌNG NHẤT (AUTO LOGIN)
+        // ===================================
         return res.redirect(`mygame://login?token=${token}`);
-
-        // ===============================
-        // ⚠️ DÙNG TEST TRÊN WEB (tạm mở nếu cần)
-        // ===============================
-        // return res.redirect(`/success?token=${token}`);
     }
 );
-
-// ===== TRANG TEST (OPTIONAL) =====
-app.get("/success", (req, res) => {
-    const token = req.query.token || "Không có token";
-
-    res.send(`
-        <h2>Login thành công ✅</h2>
-        <p>Token (test):</p>
-        <h3>${token}</h3>
-    `);
-});
 
 // ===== API LẤY USER =====
 app.get("/user", (req, res) => {
     const token = req.query.token;
 
-    if (!token || !global.users[token]) {
+    if (!token || !users[token]) {
         return res.json({ success: false });
     }
 
     res.json({
         success: true,
-        user: global.users[token]
+        user: users[token]
     });
 });
 
-// ===== API CHECK TOKEN =====
+// ===== API VERIFY TOKEN =====
 app.get("/verify-token", (req, res) => {
     const token = req.query.token;
 
-    if (!token || !global.users[token]) {
+    if (!token || !users[token]) {
         return res.json({ valid: false });
     }
 
     res.json({ valid: true });
 });
 
-// ===== START =====
+// ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log("Server chạy port:", PORT);
+    console.log("🚀 Server chạy tại port:", PORT);
 });
