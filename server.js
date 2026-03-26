@@ -5,7 +5,9 @@ app.get("/", (req, res) => {
     res.send("Server chạy OK 🚀");
 });
 
-const PORT = 3000;
+// ⚠️ QUAN TRỌNG
+const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-    console.log("Server chạy tại http://localhost:" + PORT);
+    console.log("Server chạy tại port " + PORT);
 });
