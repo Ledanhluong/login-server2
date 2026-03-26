@@ -4,9 +4,11 @@ const express = require("express");
 const session = require("express-session");
 const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const crypto = require("crypto");
 
 const app = express();
 
+// ===== SESSION =====
 app.use(session({
     secret: "secret123",
     resave: false,
@@ -16,6 +18,7 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// ===== PASSPORT =====
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((user, done) => done(null, user));
 
@@ -27,44 +30,68 @@ passport.use(new GoogleStrategy({
     return done(null, profile);
 }));
 
-// 🔥 ROUTE LOGIN (cái bạn đang thiếu)
-app.get("/auth/google",
-    passport.authenticate("google", { scope: ["profile", "email"] })
-);
+// ===== LƯU USER =====
+global.users = {};
 
-// callback
-const crypto = require("crypto");
-
-global.users = {}; // lưu tạm
-
-app.get("/auth/google/callback",
-    passport.authenticate("google", {
-        failureRedirect: "/"
-    }),
-    (req, res) => {
-
-        // 🔥 tạo token
-        const token = crypto.randomBytes(16).toString("hex");
-
-        // 🔥 lưu user theo token
-        global.users[token] = {
-            name: req.user.displayName,
-            email: req.user.emails[0].value
-        };
-
-        // 🔥 trả về trình duyệt (để test trước)
-        res.send(`
-            <h1>Login OK</h1>
-            <p>Token của bạn:</p>
-            <h2>${token}</h2>
-        `);
-    }
-);
+// ===== ROUTE =====
 
 // test
 app.get("/", (req, res) => {
     res.send("Server chạy OK 🚀");
 });
 
+// login
+app.get("/auth/google",
+    passport.authenticate("google", { scope: ["profile", "email"] })
+);
+
+// callback
+app.get("/auth/google/callback",
+    passport.authenticate("google", { failureRedirect: "/" }),
+    (req, res) => {
+
+        const token = crypto.randomBytes(16).toString("hex");
+
+        global.users[token] = {
+            name: req.user.displayName,
+            email: req.user.emails[0].value
+        };
+
+        console.log("User:", global.users[token]);
+
+        // 🔥 REDIRECT về link có token
+        res.redirect(`/success?token=${token}`);
+    }
+);
+
+// 👉 trang hiển thị (optional)
+app.get("/success", (req, res) => {
+    const token = req.query.token;
+
+    res.send(`
+        <h2>Login thành công ✅</h2>
+        <p>Bạn có thể quay lại game</p>
+        <p>Token:</p>
+        <h3>${token}</h3>
+    `);
+});
+
+// 👉 API lấy user
+app.get("/user", (req, res) => {
+    const token = req.query.token;
+
+    if (!token || !global.users[token]) {
+        return res.json({ success: false });
+    }
+
+    res.json({
+        success: true,
+        user: global.users[token]
+    });
+});
+
+// ===== START =====
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server chạy"));
+app.listen(PORT, () => {
+    console.log("Server chạy port:", PORT);
+});
